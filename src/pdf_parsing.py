@@ -1,7 +1,6 @@
 import os
 import time
 import logging
-import re
 import json
 from tabulate import tabulate
 from pathlib import Path
@@ -38,7 +37,7 @@ def _process_chunk(pdf_paths, pdf_backend, output_dir, num_threads, metadata_loo
         pdf_backend=pdf_backend,
         output_dir=output_dir,
         num_threads=num_threads,
-        csv_metadata_path=None  # 元数据查找表直接通过赋值传递
+        csv_metadata_path=None,  # 元数据查找表直接通过赋值传递
     )
     parser.metadata_lookup = metadata_lookup
     parser.debug_data_path = debug_data_path
@@ -120,7 +119,7 @@ class PDFParser:
                 # 兼容新旧CSV格式：优先使用company_name，不存在则使用name
                 company_name = row.get('company_name', row.get('name', '')).strip('"')
                 metadata_lookup[row['sha1']] = {
-                    'company_name': company_name
+                    'company_name': company_name,
                 }
         return metadata_lookup
 
@@ -153,8 +152,8 @@ class PDFParser:
             InputFormat.PDF: FormatOption(
                 pipeline_cls=StandardPdfPipeline,
                 pipeline_options=pipeline_options,
-                backend=self.pdf_backend
-            )
+                backend=self.pdf_backend,
+            ),
         }
         
         return DocumentConverter(format_options=format_options)
@@ -261,7 +260,7 @@ class PDFParser:
         # 创建空白页模板
         empty_page_template = {
             "content": [],
-            "page_dimensions": {}  # 或者使用默认页面尺寸
+            "page_dimensions": {},  # 或者使用默认页面尺寸
         }
         
         # 创建包含所有页面的新content数组
@@ -270,7 +269,7 @@ class PDFParser:
             # 查找现有页面或创建空白页
             page_content = next(
                 (page for page in data['content'] if page['page'] == page_num),
-                {"page": page_num, **empty_page_template}
+                {"page": page_num, **empty_page_template},
             )
             new_content.append(page_content)
         
@@ -320,7 +319,7 @@ class PDFParser:
         input_doc_paths: List[Path] = None,
         doc_dir: Path = None,
         optimal_workers: int = 10,
-        chunk_size: int = None
+        chunk_size: int = None,
     ):
         """
         使用多进程并行解析PDF文件，显著提升大批量处理效率。
@@ -389,7 +388,7 @@ class PDFParser:
                     self.output_dir,
                     self.num_threads,
                     self.metadata_lookup,
-                    self.debug_data_path
+                    self.debug_data_path,
                 )
                 for chunk in chunks
             ]
@@ -604,7 +603,7 @@ class JsonReportProcessor:
         content_item = {
             'text': text_item.get('text', ''),
             'type': item_type,
-            'text_id': ref_num
+            'text_id': ref_num,
         }
         
         # 仅当orig与text不同时才添加orig字段
@@ -687,7 +686,7 @@ class JsonReportProcessor:
                             pages[page_num] = {
                                 'page': page_num,
                                 'content': [],
-                                'page_dimensions': text_item['prov'][0].get('bbox', {})
+                                'page_dimensions': text_item['prov'][0].get('bbox', {}),
                             }
 
                         pages[page_num]['content'].append(content_item)
@@ -696,7 +695,7 @@ class JsonReportProcessor:
                     table_item = data['tables'][ref_num]
                     content_item = {
                         'type': 'table',
-                        'table_id': ref_num
+                        'table_id': ref_num,
                     }
 
                     if 'prov' in table_item and table_item['prov']:
@@ -706,7 +705,7 @@ class JsonReportProcessor:
                             pages[page_num] = {
                                 'page': page_num,
                                 'content': [],
-                                'page_dimensions': table_item['prov'][0].get('bbox', {})
+                                'page_dimensions': table_item['prov'][0].get('bbox', {}),
                             }
 
                         pages[page_num]['content'].append(content_item)
@@ -715,7 +714,7 @@ class JsonReportProcessor:
                     picture_item = data['pictures'][ref_num]
                     content_item = {
                         'type': 'picture',
-                        'picture_id': ref_num
+                        'picture_id': ref_num,
                     }
                     
                     if 'prov' in picture_item and picture_item['prov']:
@@ -725,7 +724,7 @@ class JsonReportProcessor:
                             pages[page_num] = {
                                 'page': page_num,
                                 'content': [],
-                                'page_dimensions': picture_item['prov'][0].get('bbox', {})
+                                'page_dimensions': picture_item['prov'][0].get('bbox', {}),
                             }
                         
                         pages[page_num]['content'].append(content_item)
@@ -777,7 +776,7 @@ class JsonReportProcessor:
                 table_bbox['l'],
                 table_bbox['t'], 
                 table_bbox['r'],
-                table_bbox['b']
+                table_bbox['b'],
             ]
             
             # 从表格数据结构获取行数和列数
@@ -795,7 +794,7 @@ class JsonReportProcessor:
                 '#-cols': ncols,
                 'markdown': table_md,
                 'html': table_html,
-                'json': table_json_obj
+                'json': table_json_obj,
             }
             assembled_tables.append(table_obj)
         return assembled_tables
@@ -834,7 +833,7 @@ class JsonReportProcessor:
         if len(table_data) > 1 and len(table_data[0]) > 0:
             try:
                 md_table = tabulate(
-                    table_data[1:], headers=table_data[0], tablefmt="github"
+                    table_data[1:], headers=table_data[0], tablefmt="github",
                 )
             except ValueError:
                 md_table = tabulate(
@@ -886,7 +885,7 @@ class JsonReportProcessor:
                 picture_bbox['l'],
                 picture_bbox['t'], 
                 picture_bbox['r'],
-                picture_bbox['b']
+                picture_bbox['b'],
             ]
             
             picture_obj = {

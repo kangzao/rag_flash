@@ -29,7 +29,7 @@ class TextSplitter():
                 "page": page,
                 "text": table_text,
                 "table_id": table["table_id"],
-                "length_tokens": self.count_tokens(table_text)
+                "length_tokens": self.count_tokens(table_text),
             })
             
         return tables_by_page
@@ -78,7 +78,7 @@ class TextSplitter():
         text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
             model_name="gpt-4o",
             chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap
+            chunk_overlap=chunk_overlap,
         )
         chunks = text_splitter.split_text(page['text'])
         chunks_with_meta = []
@@ -86,7 +86,7 @@ class TextSplitter():
             chunks_with_meta.append({
                 "page": page['page'],
                 "length_tokens": self.count_tokens(chunk),
-                "text": chunk
+                "text": chunk,
             })
         return chunks_with_meta
 
@@ -148,7 +148,7 @@ class TextSplitter():
             chunk_text = ''.join(lines[start:end])
             chunks.append({
                 'lines': [start + 1, end],  # 行号从1开始
-                'text': chunk_text
+                'text': chunk_text,
             })
             i += chunk_size - chunk_overlap
         return chunks

@@ -151,7 +151,7 @@ class Pipeline:
             questions_file_name=questions_file_name,
             pdf_reports_dir_name=pdf_reports_dir_name,
             serialized=self.run_config.use_serialized_tables,  # 决定是否添加_ser_tab后缀
-            config_suffix=self.run_config.config_suffix  # 决定答案文件后缀
+            config_suffix=self.run_config.config_suffix,  # 决定答案文件后缀
         )
 
     def _convert_json_to_csv_if_needed(self):
@@ -225,7 +225,7 @@ class Pipeline:
         # 创建PDF解析器（输出到parsed_reports目录）
         pdf_parser = PDFParser(
             output_dir=self.paths.parsed_reports_path,
-            csv_metadata_path=self.paths.subset_path  # 用于补充company_name字段
+            csv_metadata_path=self.paths.subset_path,  # 用于补充company_name字段
         )
         pdf_parser.debug_data_path = self.paths.parsed_reports_debug_path
 
@@ -236,7 +236,7 @@ class Pipeline:
         pdf_parser.parse_and_export_parallel(
             input_doc_paths=input_doc_paths,
             optimal_workers=max_workers,
-            chunk_size=chunk_size
+            chunk_size=chunk_size,
         )
         print(f"PDF reports parsed and saved to {self.paths.parsed_reports_path}")
 
@@ -329,7 +329,7 @@ class Pipeline:
         text_splitter.split_markdown_reports(
             all_md_dir=self.paths.reports_markdown_path,  # 输入：Markdown文件目录
             output_dir=self.paths.documents_dir,  # 输出：分块JSON目录
-            subset_csv=self.paths.subset_path  # 元数据映射表
+            subset_csv=self.paths.subset_path,  # 元数据映射表
         )
         print(f"分割完成，结果已保存到 {self.paths.documents_dir}")
 
@@ -512,7 +512,7 @@ class Pipeline:
             parallel_requests=self.run_config.parallel_requests,  # 并发请求数
             api_provider=self.run_config.api_provider,  # API提供商
             answering_model=self.run_config.answering_model,  # 回答模型
-            full_context=self.run_config.full_context  # 完整上下文开关
+            full_context=self.run_config.full_context,  # 完整上下文开关
         )
 
         # 获取可用文件名（避免覆盖）
@@ -522,7 +522,7 @@ class Pipeline:
         _ = processor.process_all_questions(
             output_path=output_path,
             submission_file=self.run_config.submission_file,  # 是否生成提交格式
-            pipeline_details=self.run_config.pipeline_details  # 管道描述（记录在答案中）
+            pipeline_details=self.run_config.pipeline_details,  # 管道描述（记录在答案中）
         )
         print(f"Answers saved to {output_path}")
 
@@ -575,7 +575,7 @@ class Pipeline:
             parallel_requests=1,  # 单问模式强制串行
             api_provider=self.run_config.api_provider,
             answering_model=self.run_config.answering_model,
-            full_context=self.run_config.full_context
+            full_context=self.run_config.full_context,
         )
         t1 = time.time()
         print(f"[计时] QuestionsProcessor 初始化耗时: {t1 - t0:.2f} 秒")
@@ -593,7 +593,7 @@ class Pipeline:
 # 预处理配置（用于表格序列化）
 preprocess_configs = {
     "ser_tab": RunConfig(use_serialized_tables=True),  # 启用序列化表格
-    "no_ser_tab": RunConfig(use_serialized_tables=False)  # 不启用序列化表格
+    "no_ser_tab": RunConfig(use_serialized_tables=False),  # 不启用序列化表格
 }
 
 # 基础配置：简单向量检索 + Self-Organizing CoT
@@ -602,7 +602,7 @@ base_config = RunConfig(
     submission_file=True,  # 生成提交格式
     pipeline_details="Custom pdf parsing + vDB + Router + SO CoT; llm = GPT-4o-mini",
     config_suffix="_base",  # 答案文件后缀：answers_base.json
-    answering_model="gpt-4o-mini-2024-07-18"
+    answering_model="gpt-4o-mini-2024-07-18",
 )
 
 # 父文档检索配置：检索小片段但返回更大上下文
@@ -612,7 +612,7 @@ parent_document_retrieval_config = RunConfig(
     submission_file=True,
     pipeline_details="Custom pdf parsing + vDB + Router + Parent Document Retrieval + SO CoT; llm = GPT-4o",
     answering_model="gpt-4o-2024-08-06",  # 使用更强的GPT-4o
-    config_suffix="_pdr"  # 答案文件后缀：answers_pdr.json
+    config_suffix="_pdr",  # 答案文件后缀：answers_pdr.json
 )
 
 ## 最大配置：启用所有高级功能（父文档检索 + LLM重排序）
@@ -624,14 +624,14 @@ max_config = RunConfig(
     submission_file=True,
     pipeline_details="Custom pdf parsing + vDB + Router + Parent Document Retrieval + reranking + SO CoT; llm = qwen-turbo",
     answering_model="qwen-turbo-latest",  # 使用Qwen-Turbo
-    config_suffix="_qwen_turbo"  # 答案文件后缀：answers_qwen_turbo.json
+    config_suffix="_qwen_turbo",  # 答案文件后缀：answers_qwen_turbo.json
 )
 
 # 配置注册表（方便切换不同实验配置）
 configs = {
     "base": base_config,  # 基础版
     "pdr": parent_document_retrieval_config,  # 父文档检索版
-    "max": max_config  # 完整版（最高精度）
+    "max": max_config,  # 完整版（最高精度）
 }
 
 # === 主执行入口 ===

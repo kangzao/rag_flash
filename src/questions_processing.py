@@ -26,7 +26,7 @@ class QuestionsProcessor:
         parallel_requests: int = 10,
         api_provider: str = "dashscope", # openai
         answering_model: str = "qwen-turbo-latest", # gpt-4o-2024-08-06
-        full_context: bool = False
+        full_context: bool = False,
     ):
         # 初始化问题处理器，配置检索、模型、并发等参数
         self.questions = self._load_questions(questions_file_path)
@@ -132,12 +132,12 @@ class QuestionsProcessor:
         if self.llm_reranking:
             retriever = HybridRetriever(
                 vector_db_dir=self.vector_db_dir,
-                documents_dir=self.documents_dir
+                documents_dir=self.documents_dir,
             )
         else:
             retriever = VectorRetriever(
                 vector_db_dir=self.vector_db_dir,
-                documents_dir=self.documents_dir
+                documents_dir=self.documents_dir,
             )
         t1 = time.time()
         print(f"[计时] [get_answer_for_company] 检索器初始化耗时: {t1-t0:.2f} 秒")
@@ -150,7 +150,7 @@ class QuestionsProcessor:
                 query=question,
                 llm_reranking_sample_size=self.llm_reranking_sample_size,
                 top_n=self.top_n_retrieval,
-                return_parent_pages=self.return_parent_pages
+                return_parent_pages=self.return_parent_pages,
             )
             t3 = time.time()
             print(f"[计时] [get_answer_for_company] 检索耗时: {t3-t2:.2f} 秒")
@@ -164,7 +164,7 @@ class QuestionsProcessor:
             question=question,
             rag_context=rag_context,
             schema=schema,
-            model=self.answering_model
+            model=self.answering_model,
         )
         t6 = time.time()
         print(f"[计时] [get_answer_for_company] LLM调用耗时: {t6-t5:.2f} 秒")
@@ -226,7 +226,7 @@ class QuestionsProcessor:
                 "reasoning_summary": answer_dict['reasoning_summary'],
                 "relevant_pages": answer_dict['relevant_pages'],
                 "response_data": self.response_data,
-                "self": ref_id
+                "self": ref_id,
             }
         return ref_id
 
@@ -237,7 +237,7 @@ class QuestionsProcessor:
         na_count = sum(1 for q in processed_questions if (q.get("value") if "value" in q else q.get("answer")) == "N/A")
         success_count = total_questions - error_count - na_count
         if print_stats:
-            print(f"\nFinal Processing Statistics:")
+            print("\nFinal Processing Statistics:")
             print(f"Total questions: {total_questions}")
             print(f"Errors: {error_count} ({(error_count/total_questions)*100:.1f}%)")
             print(f"N/A answers: {na_count} ({(na_count/total_questions)*100:.1f}%)")
@@ -247,7 +247,7 @@ class QuestionsProcessor:
             "total_questions": total_questions,
             "error_count": error_count,
             "na_count": na_count,
-            "success_count": success_count
+            "success_count": success_count,
         }
 
     def process_questions_list(self, questions_list: List[dict], output_path: str = None, submission_file: bool = False, pipeline_details: str = "") -> dict:
@@ -285,7 +285,7 @@ class QuestionsProcessor:
         return {
             "questions": processed_questions,
             "answer_details": self.answer_details,
-            "statistics": statistics
+            "statistics": statistics,
         }
 
     def _process_single_question(self, question_data: dict) -> dict:
@@ -304,7 +304,7 @@ class QuestionsProcessor:
                 detail_ref = self._create_answer_detail_ref({
                     "step_by_step_analysis": None,
                     "reasoning_summary": None,
-                    "relevant_pages": None
+                    "relevant_pages": None,
                 }, question_index)
                 if self.new_challenge_pipeline:
                     return {
@@ -313,7 +313,7 @@ class QuestionsProcessor:
                         "value": None,
                         "references": [],
                         "error": answer_dict["error"],
-                        "answer_details": {"$ref": detail_ref}
+                        "answer_details": {"$ref": detail_ref},
                     }
                 else:
                     return {
@@ -330,7 +330,7 @@ class QuestionsProcessor:
                     "kind": schema,
                     "value": answer_dict.get("final_answer"),
                     "references": answer_dict.get("references", []),
-                    "answer_details": {"$ref": detail_ref}
+                    "answer_details": {"$ref": detail_ref},
                 }
             else:
                 return {
@@ -353,7 +353,7 @@ class QuestionsProcessor:
         error_ref = f"#/answer_details/{question_index}"
         error_detail = {
             "error_traceback": tb,
-            "self": error_ref
+            "self": error_ref,
         }
         
         with self._lock:
@@ -371,7 +371,7 @@ class QuestionsProcessor:
                 "value": None,
                 "references": [],
                 "error": f"{type(err).__name__}: {error_message}",
-                "answer_details": {"$ref": error_ref}
+                "answer_details": {"$ref": error_ref},
             }
         else:
             return {
@@ -416,7 +416,7 @@ class QuestionsProcessor:
                 references = [
                     {
                         "pdf_sha1": ref["pdf_sha1"],
-                        "page_index": ref["page_index"] - 1
+                        "page_index": ref["page_index"] - 1,
                     }
                     for ref in references
                 ]
@@ -443,7 +443,7 @@ class QuestionsProcessor:
             result = {
                 "questions": processed_questions,
                 "answer_details": self.answer_details,
-                "statistics": statistics
+                "statistics": statistics,
             }
             output_file = Path(output_path)
             debug_file = output_file.with_name(output_file.stem + "_debug" + output_file.suffix)
@@ -455,7 +455,7 @@ class QuestionsProcessor:
                 submission_answers = self._post_process_submission_answers(processed_questions)
                 submission = {
                     "answers": submission_answers,
-                    "details": pipeline_details
+                    "details": pipeline_details,
                 }
                 with open(output_file, 'w', encoding='utf-8') as file:
                     json.dump(submission, file, ensure_ascii=False, indent=2)
@@ -465,7 +465,7 @@ class QuestionsProcessor:
             self.questions,
             output_path,
             submission_file=submission_file,
-            pipeline_details=pipeline_details
+            pipeline_details=pipeline_details,
         )
         return result
 
@@ -479,7 +479,7 @@ class QuestionsProcessor:
         # Step 1: Rephrase the comparative question
         rephrased_questions = self.openai_processor.get_rephrased_questions(
             original_question=question,
-            companies=companies
+            companies=companies,
         )
         
         individual_answers = {}
@@ -495,7 +495,7 @@ class QuestionsProcessor:
             answer_dict = self.get_answer_for_company(
                 company_name=company, 
                 question=sub_question, 
-                schema="number"
+                schema="number",
             )
             return company, answer_dict
 
@@ -529,7 +529,7 @@ class QuestionsProcessor:
             question=question,
             rag_context=individual_answers,
             schema="comparative",
-            model=self.answering_model
+            model=self.answering_model,
         )
         self.response_data = self.openai_processor.response_data
         

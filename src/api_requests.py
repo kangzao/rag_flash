@@ -12,7 +12,6 @@ import requests
 from json_repair import repair_json
 from pydantic import BaseModel
 import google.generativeai as genai
-from copy import deepcopy
 from tenacity import retry, stop_after_attempt, wait_fixed
 import dashscope
 
@@ -30,7 +29,7 @@ class BaseOpenaiProcessor:
         llm = OpenAI(
             api_key=os.getenv("OPENAI_API_KEY"),
             timeout=None,
-            max_retries=2
+            max_retries=2,
         )
         return llm
 
@@ -42,7 +41,7 @@ class BaseOpenaiProcessor:
             system_content='You are a helpful assistant.',
             human_content='Hello!',
             is_structured=False,
-            response_format=None
+            response_format=None,
     ):
         # 发送消息到OpenAI，支持结构化/非结构化输出
         if model is None:
@@ -52,8 +51,8 @@ class BaseOpenaiProcessor:
             "seed": seed,
             "messages": [
                 {"role": "system", "content": system_content},
-                {"role": "user", "content": human_content}
-            ]
+                {"role": "user", "content": human_content},
+            ],
         }
 
         # 部分模型不支持temperature
@@ -125,11 +124,11 @@ class BaseIBMAPIProcessor:
         embeddings_url = f"{self.base_url}/embeddings"
         headers = {
             "Authorization": f"Bearer {self.api_token}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
         payload = {
             "inputs": texts,
-            "model_id": model_id
+            "model_id": model_id,
         }
 
         try:
@@ -152,7 +151,7 @@ class BaseIBMAPIProcessor:
             response_format=None,
             max_new_tokens=5000,
             min_new_tokens=1,
-            **kwargs
+            **kwargs,
     ):
         # 发送消息到IBM API，支持结构化/非结构化输出
         if model is None:
@@ -160,13 +159,13 @@ class BaseIBMAPIProcessor:
         text_generation_url = f"{self.base_url}/text_generation"
         headers = {
             "Authorization": f"Bearer {self.api_token}",
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
         }
 
         # Prepare the input messages
         input_messages = [
             {"role": "system", "content": system_content},
-            {"role": "user", "content": human_content}
+            {"role": "user", "content": human_content},
         ]
 
         # Prepare parameters with defaults and any additional parameters
@@ -175,13 +174,13 @@ class BaseIBMAPIProcessor:
             "random_seed": seed,
             "max_new_tokens": max_new_tokens,
             "min_new_tokens": min_new_tokens,
-            **kwargs
+            **kwargs,
         }
 
         payload = {
             "input": input_messages,
             "model_id": model,
-            "parameters": parameters
+            "parameters": parameters,
         }
 
         try:
@@ -202,7 +201,7 @@ class BaseIBMAPIProcessor:
                     content = validated_data.model_dump()
                     return content
 
-                except Exception as err:
+                except Exception:
                     print("Error processing structured response, attempting to reparse the response...")
                     reparsed = self._reparse_response(content, system_content)
                     try:
@@ -232,13 +231,13 @@ class BaseIBMAPIProcessor:
 
         user_prompt = prompts.AnswerSchemaFixPrompt.user_prompt.format(
             system_prompt=system_content,
-            response=response
+            response=response,
         )
 
         reparsed_response = self.send_message(
             system_content=prompts.AnswerSchemaFixPrompt.system_prompt,
             human_content=user_prompt,
-            is_structured=False
+            is_structured=False,
         )
 
         return reparsed_response
@@ -284,7 +283,7 @@ class BaseGeminiProcessor:
         try:
             return model.generate_content(
                 human_content,
-                generation_config=generation_config
+                generation_config=generation_config,
             )
         except Exception as e:
             if getattr(e, '_attempt_number', 0) == 3:
@@ -307,7 +306,7 @@ class BaseGeminiProcessor:
         """Reparse invalid JSON responses using the model itself."""
         user_prompt = prompts.AnswerSchemaFixPrompt.user_prompt.format(
             system_prompt=prompts.AnswerSchemaFixPrompt.system_prompt,
-            response=response
+            response=response,
         )
 
         try:
@@ -315,7 +314,7 @@ class BaseGeminiProcessor:
                 model="gemini-2.0-flash-001",
                 system_content=prompts.AnswerSchemaFixPrompt.system_prompt,
                 human_content=user_prompt,
-                is_structured=False
+                is_structured=False,
             )
 
             try:
@@ -354,7 +353,7 @@ class BaseGeminiProcessor:
 
         model_instance = self.llm.GenerativeModel(
             model_name=model,
-            generation_config=generation_config
+            generation_config=generation_config,
         )
 
         try:
@@ -363,7 +362,7 @@ class BaseGeminiProcessor:
             self.response_data = {
                 "model": response.model_version,
                 "input_tokens": response.usage_metadata.prompt_token_count,
-                "output_tokens": response.usage_metadata.candidates_token_count
+                "output_tokens": response.usage_metadata.candidates_token_count,
             }
             print(self.response_data)
 
@@ -396,7 +395,7 @@ class APIProcessor:
             human_content="Hello!",
             is_structured=False,
             response_format=None,
-            **kwargs
+            **kwargs,
     ):
         """
         Routes the send_message call to the appropriate processor.
@@ -412,7 +411,7 @@ class APIProcessor:
             human_content=human_content,
             is_structured=is_structured,
             response_format=response_format,
-            **kwargs
+            **kwargs,
         )
 
     def get_answer_from_rag_context(self, question, rag_context, schema, model):
@@ -423,7 +422,7 @@ class APIProcessor:
             system_content=system_prompt,
             human_content=user_prompt.format(context=rag_context, question=question),
             is_structured=True,
-            response_format=response_format
+            response_format=response_format,
         )
         self.response_data = self.processor.response_data
         # 假如 answer_dict 只有 final_answer，自动兜底
@@ -432,7 +431,7 @@ class APIProcessor:
                 "step_by_step_analysis": "",
                 "reasoning_summary": "",
                 "relevant_pages": [],
-                "final_answer": answer_dict.get("final_answer", "N/A")
+                "final_answer": answer_dict.get("final_answer", "N/A"),
             }
         return answer_dict
 
@@ -481,10 +480,10 @@ class APIProcessor:
             system_content=prompts.RephrasedQuestionsPrompt.system_prompt,
             human_content=prompts.RephrasedQuestionsPrompt.user_prompt.format(
                 question=original_question,
-                companies=", ".join([f'"{company}"' for company in companies])
+                companies=", ".join([f'"{company}"' for company in companies]),
             ),
             is_structured=True,
-            response_format=prompts.RephrasedQuestionsPrompt.RephrasedQuestions
+            response_format=prompts.RephrasedQuestionsPrompt.RephrasedQuestions,
         )
 
         # Convert the answer_dict to the desired format
@@ -524,7 +523,7 @@ class AsyncOpenaiProcessor:
             token_encoding_name="o200k_base",
             max_attempts=5,
             logging_level=20,
-            progress_callback=None
+            progress_callback=None,
     ):
         # Create requests for jsonl
         jsonl_requests = []
@@ -538,7 +537,7 @@ class AsyncOpenaiProcessor:
                     {"role": "user", "content": query},
                 ],
                 'response_format': type_to_response_format_param(response_format),
-                'metadata': {'original_index': idx}
+                'metadata': {'original_index': idx},
             }
             jsonl_requests.append(request)
 
@@ -583,9 +582,9 @@ class AsyncOpenaiProcessor:
                     max_tokens_per_minute=max_tokens_per_minute,
                     token_encoding_name=token_encoding_name,
                     max_attempts=max_attempts,
-                    logging_level=logging_level
+                    logging_level=logging_level,
                 ),
-                monitor_progress()
+                monitor_progress(),
             )
 
         await process_with_progress()
@@ -597,7 +596,7 @@ class AsyncOpenaiProcessor:
                 raw_line = line.strip()
                 try:
                     result = json.loads(raw_line)
-                except json.JSONDecodeError as e:
+                except json.JSONDecodeError:
                     print(f"[ERROR] Line {line_number}: Failed to load JSON from line: {raw_line}")
                     continue
 
@@ -618,7 +617,7 @@ class AsyncOpenaiProcessor:
                 results.append({
                     'index': result[2],
                     'question': result[0]['messages'],
-                    'answer': answer
+                    'answer': answer,
                 })
 
             # Sort by original index and build final list
@@ -662,7 +661,7 @@ class BaseDashscopeProcessor:
             human_content='Hello!',
             is_structured=False,
             response_format=None,
-            **kwargs
+            **kwargs,
     ):
         """
         发送消息到DashScope Qwen大模型，支持 system_content + human_content 拼接为 messages。
@@ -687,7 +686,7 @@ class BaseDashscopeProcessor:
             model=model,
             messages=messages,
             temperature=temperature,
-            result_format='message'
+            result_format='message',
         )
         print('dashscope.api_key=', dashscope.api_key)
         print('model=', model)

@@ -27,7 +27,7 @@ class JinaReranker:
             "model": "jina-reranker-v2-base-multilingual",
             "query": query,
             "top_n": top_n,
-            "documents": documents
+            "documents": documents,
         }
 
         response = requests.post(url=self.url, headers=self.headers, json=data)
@@ -68,7 +68,7 @@ class LLMReranker:
                     {"role": "system", "content": self.system_prompt_rerank_single_block},
                     {"role": "user", "content": user_prompt},
                 ],
-                response_format=self.schema_for_single_block
+                response_format=self.schema_for_single_block,
             )
             response = completion.choices[0].message.parsed
             response_dict = response.model_dump()
@@ -83,7 +83,7 @@ class LLMReranker:
                 model="qwen-turbo",
                 messages=messages,
                 temperature=0,
-                result_format='message'
+                result_format='message',
             )
             # 健壮性检查，防止 rsp 为 None 或非 dict
             if not rsp or not isinstance(rsp, dict):
@@ -114,7 +114,7 @@ class LLMReranker:
                     {"role": "system", "content": self.system_prompt_rerank_multiple_blocks},
                     {"role": "user", "content": user_prompt},
                 ],
-                response_format=self.schema_for_multiple_blocks
+                response_format=self.schema_for_multiple_blocks,
             )
             response = completion.choices[0].message.parsed
             response_dict = response.model_dump()
@@ -128,7 +128,7 @@ class LLMReranker:
                 model="qwen-turbo",
                 messages=messages,
                 temperature=0,
-                result_format='message'
+                result_format='message',
             )
             # 健壮性检查，防止 rsp 为 None 或非 dict
             if not rsp or not isinstance(rsp, dict):
@@ -170,7 +170,7 @@ class LLMReranker:
                 doc_with_score["combined_score"] = round(
                     llm_weight * ranking["relevance_score"] + 
                     vector_weight * doc['distance'],
-                    4
+                    4,
                 )
                 return doc_with_score
 
@@ -196,7 +196,7 @@ class LLMReranker:
                     for _ in range(len(batch) - len(block_rankings)):
                         block_rankings.append({
                             "relevance_score": 0.0, 
-                            "reasoning": "Default ranking due to missing LLM response"
+                            "reasoning": "Default ranking due to missing LLM response",
                         })
                 
                 for doc, rank in zip(batch, block_rankings):
@@ -205,7 +205,7 @@ class LLMReranker:
                     doc_with_score["combined_score"] = round(
                         llm_weight * rank["relevance_score"] + 
                         vector_weight * doc['distance'],
-                        4
+                        4,
                     )
                     results.append(doc_with_score)
                 return results

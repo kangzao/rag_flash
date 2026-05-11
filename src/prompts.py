@@ -463,7 +463,7 @@ class RetrievalRankingSingleBlock(BaseModel):
 class RetrievalRankingMultipleBlocks(BaseModel):
     """对检索到的多个文本块与查询的相关性进行评分。"""
     block_rankings: List[RetrievalRankingSingleBlock] = Field(
-        description="文本块及其相关性分数的列表。"
+        description="文本块及其相关性分数的列表。",
     )
 
 class AnswerWithRAGContextStringPrompt:

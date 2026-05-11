@@ -41,7 +41,7 @@ def get_task_id(file_name: str) -> str:
     url = 'https://mineru.net/api/v4/extract/task'
     header = {
         'Content-Type': 'application/json',
-        "Authorization": f"Bearer {MINERU_API_KEY}"
+        "Authorization": f"Bearer {MINERU_API_KEY}",
     }
     # PDF文件在OSS上的公开访问路径
     pdf_url = 'https://vl-image.oss-cn-shanghai.aliyuncs.com/pdf/' + file_name
@@ -78,7 +78,7 @@ def get_result(task_id: str) -> None:
     url = f'https://mineru.net/api/v4/extract/task/{task_id}'
     header = {
         'Content-Type': 'application/json',
-        "Authorization": f"Bearer {MINERU_API_KEY}"
+        "Authorization": f"Bearer {MINERU_API_KEY}",
     }
 
     while True:
