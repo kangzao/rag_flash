@@ -265,7 +265,7 @@ class Pipeline:
         """
         # 调用 pdf_mineru 获取 task_id 并下载、解压
         print(f"开始处理: {file_name}")
-        task_id = pdf_mineru.get_task_id(file_name)  # 上传PDF并启动异步任务
+        task_id = pdf_mineru.get_task_id()  # 上传PDF并启动异步任务
         print(f"task_id: {task_id}")
         pdf_mineru.get_result(task_id)  # 等待任务完成并下载结果
 
