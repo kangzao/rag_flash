@@ -15,17 +15,11 @@ venv/
 .env
 .env.local
 
-# Data
+# Data - 运行时生成的大文件
 data/
+
 *.db
 *.sqlite
-.zip
-
-# Logs
-*.log
-
-# Images
-.jpg
 
 # OS
 .DS_Store

@@ -24,11 +24,11 @@ if not MINERU_API_KEY:
     raise ValueError("环境变量 MINERU_API_KEY 未设置")
 
 
-def get_task_id() -> str:
+def get_task_id(pdf_url: str = None) -> str:
     """提交PDF转换任务，获取异步任务ID。
 
     Args:
-        无参数，使用预配置的OSS URL
+        pdf_url: PDF的OSS预签名URL，或本地文件路径（以file://开头）
 
     Returns:
         str: 任务ID，用于后续查询任务状态和下载结果
@@ -45,14 +45,14 @@ def get_task_id() -> str:
         "Authorization": f"Bearer {MINERU_API_KEY}",
     }
 
-    # 阿里云OSS预签名URL
-    pdf_url = 'https://oss-pai-vd3ayvr6hn0lcq00ve-cn-shanghai.oss-cn-shanghai.aliyuncs.com/%E3%80%90%E8%B4%A2%E6%8A%A5%E3%80%91%E4%B8%AD%E8%8A%AF%E5%9B%BD%E9%99%85%EF%BC%9A%E4%B8%AD%E8%8A%AF%E5%9B%BD%E9%99%852024%E5%B9%B4%E5%B9%B4%E5%BA%A6%E6%8A%A5%E5%91%8A.pdf?Expires=1779292927&OSSAccessKeyId=TMP.3L1DeGL3Aro7eeJFnSKL2iCGzw5au9F2BZ2o1FssEQgj7uEVqqje56YERfWAGgSrme13gjqfFatSEE75R3SSPSAwTJQHCf&Signature=QXAAIwcEpurBUyYBtOagiaI7Jqo%3D'
+    if not pdf_url:
+        raise ValueError("pdf_url is required")
     data = {
         'url': pdf_url,
         'is_ocr': True,
         'enable_formula': False,
     }
-    print(f"使用OSS路径提交")
+    print(f"提交PDF: {pdf_url[:80]}..." if len(pdf_url) > 80 else f"提交PDF: {pdf_url}")
 
     res = requests.post(url, headers=header, json=data)
     print(f"HTTP状态码: {res.status_code}")
@@ -154,7 +154,10 @@ def unzip_file(zip_path: str, extract_dir: str = None) -> None:
 
 
 if __name__ == "__main__":
-    # 使用OSS预签名URL提交
-    task_id = get_task_id()
+    import sys
+    if len(sys.argv) < 2:
+        print("Usage: python pdf_mineru.py <pdf_url>")
+        sys.exit(1)
+    task_id = get_task_id(sys.argv[1])
     print('task_id:', task_id)
     get_result(task_id)

@@ -24,8 +24,7 @@ class QuestionsProcessor:
         llm_reranking_sample_size: int = 5,
         top_n_retrieval: int = 10,
         parallel_requests: int = 10,
-        api_provider: str = "dashscope", # openai
-        answering_model: str = "qwen-turbo-latest", # gpt-4o-2024-08-06
+        answering_model: str = "qwen-turbo",  # 通义千问
         full_context: bool = False,
     ):
         # 初始化问题处理器，配置检索、模型、并发等参数
@@ -33,7 +32,7 @@ class QuestionsProcessor:
         self.documents_dir = Path(documents_dir)
         self.vector_db_dir = Path(vector_db_dir)
         self.subset_path = Path(subset_path) if subset_path else None
-        
+
         self.new_challenge_pipeline = new_challenge_pipeline
         self.return_parent_pages = parent_document_retrieval
         self.llm_reranking = llm_reranking
@@ -41,13 +40,15 @@ class QuestionsProcessor:
         self.top_n_retrieval = top_n_retrieval
         self.answering_model = answering_model
         self.parallel_requests = parallel_requests
-        self.api_provider = api_provider
-        self.openai_processor = APIProcessor(provider=api_provider)
+        self.openai_processor = APIProcessor()  # 通义千问
         self.full_context = full_context
 
         self.answer_details = []
         self.detail_counter = 0
         self._lock = threading.Lock()
+
+        self._retriever = None
+        self._companies_df = None
 
     def _load_questions(self, questions_file_path: Optional[Union[str, Path]]) -> List[Dict[str, str]]:
         # 加载问题文件，返回问题列表
@@ -55,6 +56,31 @@ class QuestionsProcessor:
             return []
         with open(questions_file_path, 'r', encoding='utf-8') as file:
             return json.load(file)
+
+    def _get_retriever(self):
+        if self._retriever is None:
+            if self.llm_reranking:
+                self._retriever = HybridRetriever(
+                    vector_db_dir=self.vector_db_dir,
+                    documents_dir=self.documents_dir,
+                )
+            else:
+                self._retriever = VectorRetriever(
+                    vector_db_dir=self.vector_db_dir,
+                    documents_dir=self.documents_dir,
+                )
+        return self._retriever
+
+    def _get_companies_df(self) -> pd.DataFrame:
+        if self._companies_df is None:
+            if self.subset_path is None:
+                raise ValueError("subset_path must be provided")
+            try:
+                self._companies_df = pd.read_csv(self.subset_path, encoding='utf-8')
+            except UnicodeDecodeError:
+                print('警告：subset.csv 不是 utf-8 编码，自动尝试 gbk 编码...')
+                self._companies_df = pd.read_csv(self.subset_path, encoding='gbk')
+        return self._companies_df
 
     def _format_retrieval_results(self, retrieval_results) -> str:
         """将检索结果格式化为RAG上下文字符串"""
@@ -71,17 +97,8 @@ class QuestionsProcessor:
 
     def _extract_references(self, pages_list: list, company_name: str) -> list:
         # 根据公司名和页码列表，提取引用信息
-        if self.subset_path is None:
-            raise ValueError("subset_path is required for new challenge pipeline when processing references.")
-        # 优先尝试 utf-8，失败则尝试 gbk
-        try:
-            self.companies_df = pd.read_csv(self.subset_path, encoding='utf-8')
-        except UnicodeDecodeError:
-            print('警告：subset.csv 不是 utf-8 编码，自动尝试 gbk 编码...')
-            self.companies_df = pd.read_csv(self.subset_path, encoding='gbk')
-
-        # Find the company's SHA1 from the subset CSV
-        matching_rows = self.companies_df[self.companies_df['company_name'] == company_name]
+        companies_df = self._get_companies_df()
+        matching_rows = companies_df[companies_df['company_name'] == company_name]
         if matching_rows.empty:
             company_sha1 = ""
         else:
@@ -129,21 +146,12 @@ class QuestionsProcessor:
     def get_answer_for_company(self, company_name: str, question: str, schema: str) -> dict:
         # 针对单个公司，检索上下文并调用LLM生成答案
         t0 = time.time()
-        if self.llm_reranking:
-            retriever = HybridRetriever(
-                vector_db_dir=self.vector_db_dir,
-                documents_dir=self.documents_dir,
-            )
-        else:
-            retriever = VectorRetriever(
-                vector_db_dir=self.vector_db_dir,
-                documents_dir=self.documents_dir,
-            )
+        retriever = self._get_retriever()
         t1 = time.time()
-        print(f"[计时] [get_answer_for_company] 检索器初始化耗时: {t1-t0:.2f} 秒")
+        print(f"[计时] [get_answer_for_company] 检索器获取耗时: {t1-t0:.2f} 秒")
         if self.full_context:
             retrieval_results = retriever.retrieve_all(company_name)
-        else:           
+        else:
             t2 = time.time()
             retrieval_results = retriever.retrieve_by_company_name(
                 company_name=company_name,
@@ -179,25 +187,17 @@ class QuestionsProcessor:
 
     def _extract_companies_from_subset(self, question_text: str) -> list[str]:
         """从问题文本中提取公司名，匹配subset文件中的公司"""
-        if not hasattr(self, 'companies_df'):
-            if self.subset_path is None:
-                raise ValueError("subset_path must be provided to use subset extraction")
-            # 优先尝试 utf-8，失败则尝试 gbk
-            try:
-                self.companies_df = pd.read_csv(self.subset_path, encoding='utf-8')
-            except UnicodeDecodeError:
-                print('警告：subset.csv 不是 utf-8 编码，自动尝试 gbk 编码...')
-                self.companies_df = pd.read_csv(self.subset_path, encoding='gbk')
-        
+        companies_df = self._get_companies_df()
+
         found_companies = []
-        company_names = sorted(self.companies_df['company_name'].unique(), key=len, reverse=True)
-        
+        company_names = sorted(companies_df['company_name'].unique(), key=len, reverse=True)
+
         for company in company_names:
             # 只要公司名在问题文本中出现就算匹配（包含关系）
             if company in question_text:
                 found_companies.append(company)
                 question_text = question_text.replace(company, '')
-        
+
         return found_companies
 
     def process_question(self, question: str, schema: str):

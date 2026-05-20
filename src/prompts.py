@@ -507,3 +507,14 @@ class AnswerWithRAGContextStringPrompt:
 
     system_prompt = build_system_prompt(instruction, example)
     system_prompt_with_schema = build_system_prompt(instruction, example, pydantic_schema)
+
+
+# Schema分发映射：消除if-elif链
+SCHEMA_MAP = {
+    "name": (AnswerWithRAGContextNamePrompt, AnswerWithRAGContextNamePrompt.AnswerSchema),
+    "number": (AnswerWithRAGContextNumberPrompt, AnswerWithRAGContextNumberPrompt.AnswerSchema),
+    "boolean": (AnswerWithRAGContextBooleanPrompt, AnswerWithRAGContextBooleanPrompt.AnswerSchema),
+    "names": (AnswerWithRAGContextNamesPrompt, AnswerWithRAGContextNamesPrompt.AnswerSchema),
+    "comparative": (ComparativeAnswerPrompt, ComparativeAnswerPrompt.AnswerSchema),
+    "string": (AnswerWithRAGContextStringPrompt, AnswerWithRAGContextStringPrompt.AnswerSchema),
+}

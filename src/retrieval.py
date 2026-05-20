@@ -23,33 +23,41 @@ class BM25Retriever(BaseRetriever):
     def __init__(self, bm25_db_dir: Path, documents_dir: Path):
         self.bm25_db_dir = bm25_db_dir
         self.documents_dir = documents_dir
+        self._doc_cache: Dict[str, dict] = {}
+        self._pages_cache: Dict[str, Dict[int, dict]] = {}
+        self._load_documents()
+
+    def _load_documents(self):
+        for path in self.documents_dir.glob("*.json"):
+            with open(path, "r", encoding="utf-8") as f:
+                doc = json.load(f)
+            company_name = doc["metainfo"].get("company_name")
+            if company_name:
+                self._doc_cache[company_name] = doc
+                pages = doc["content"].get("pages", [])
+                self._pages_cache[company_name] = {p["page"]: p for p in pages}
 
     def retrieve_by_company_name(self, company_name: str, query: str, top_n: int = 3, **kwargs) -> List[Dict]:
-        document = self._find_document(company_name)
+        document = self._doc_cache.get(company_name)
+        if not document:
+            raise ValueError(f"No report found for '{company_name}'")
+
         bm25_path = self.bm25_db_dir / f"{document['metainfo']['sha1']}.pkl"
         with open(bm25_path, "rb") as f:
             bm25_index = pickle.load(f)
 
         chunks = document["content"]["chunks"]
-        pages = document["content"]["pages"]
+        pages_map = self._pages_cache.get(company_name, {})
         scores = bm25_index.get_scores(query.split())
         top_indices = sorted(range(len(scores)), key=lambda i: scores[i], reverse=True)[:top_n]
 
-        return self._build_results(top_indices, chunks, pages, scores, kwargs.get("return_parent_pages", False))
+        return self._build_results(top_indices, chunks, pages_map, scores, kwargs.get("return_parent_pages", False))
 
-    def _find_document(self, company_name: str) -> dict:
-        for path in self.documents_dir.glob("*.json"):
-            with open(path, "r", encoding="utf-8") as f:
-                doc = json.load(f)
-                if doc["metainfo"].get("company_name") == company_name:
-                    return doc
-        raise ValueError(f"No report found for '{company_name}'")
-
-    def _build_results(self, indices: List[int], chunks: List[dict], pages: List[dict], scores: List[float], return_parent: bool) -> List[Dict]:
+    def _build_results(self, indices: List[int], chunks: List[dict], pages_map: Dict[int, dict], scores: List[float], return_parent: bool) -> List[Dict]:
         results, seen = [], set()
         for idx in indices:
             chunk = chunks[idx]
-            parent = next((p for p in pages if p["page"] == chunk["page"]), None)
+            parent = pages_map.get(chunk["page"])
             if return_parent and parent and parent["page"] not in seen:
                 seen.add(parent["page"])
                 results.append({"distance": round(scores[idx], 4), "page": parent["page"], "text": parent["text"]})
@@ -64,6 +72,11 @@ class VectorRetriever(BaseRetriever):
         self.documents_dir = documents_dir
         self.embedding = EmbeddingService(embedding_provider)
         self.all_dbs = self._load_dbs()
+        self._pages_cache: Dict[str, Dict[int, dict]] = {r["name"]: self._build_pages_cache(r["document"]) for r in self.all_dbs}
+
+    def _build_pages_cache(self, doc: dict) -> Dict[int, dict]:
+        pages = doc["content"].get("pages", [])
+        return {p["page"]: p for p in pages}
 
     def _load_dbs(self) -> List[dict]:
         dbs = []
@@ -85,11 +98,11 @@ class VectorRetriever(BaseRetriever):
     def retrieve_by_company_name(self, company_name: str, query: str, top_n: int = 3, **kwargs) -> List[Dict]:
         target = self._find_report(company_name)
         chunks = target["document"]["content"]["chunks"]
-        pages = target["document"]["content"].get("pages", [])
+        pages_map = self._pages_cache.get(target["name"], {})
         embedding = self.embedding.embed(query)
         vec = np.array(embedding, dtype=np.float32).reshape(1, -1)
         distances, indices = target["vector_db"].search(vec, min(top_n, len(chunks)))
-        return self._format_results(distances[0], indices[0], chunks, pages, kwargs.get("return_parent_pages", False))
+        return self._format_results(distances[0], indices[0], chunks, pages_map, kwargs.get("return_parent_pages", False))
 
     def _find_report(self, company_name: str) -> dict:
         for report in self.all_dbs:
@@ -98,11 +111,11 @@ class VectorRetriever(BaseRetriever):
                 return report
         raise ValueError(f"No report found for '{company_name}'")
 
-    def _format_results(self, distances: np.ndarray, indices: np.ndarray, chunks: List[dict], pages: List[dict], return_parent: bool) -> List[Dict]:
+    def _format_results(self, distances: np.ndarray, indices: np.ndarray, chunks: List[dict], pages_map: Dict[int, dict], return_parent: bool) -> List[Dict]:
         results, seen = [], set()
         for dist, idx in zip(distances, indices):
             chunk = chunks[idx]
-            parent = next((p for p in pages if p["page"] == chunk.get("page")), None) if pages else None
+            parent = pages_map.get(chunk.get("page")) if pages_map else None
             if return_parent and parent and parent["page"] not in seen:
                 seen.add(parent["page"])
                 results.append({"distance": round(float(dist), 4), "page": parent["page"], "text": parent["text"]})

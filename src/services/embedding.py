@@ -1,4 +1,4 @@
-"""统一 Embedding 服务，封装 DashScope 和 OpenAI."""
+"""统一 Embedding 服务，封装 DashScope."""
 import os
 import numpy as np
 from typing import Union, List
@@ -6,23 +6,14 @@ from dotenv import load_dotenv
 
 
 class EmbeddingService:
-    PROVIDERS = ("openai", "dashscope")
+    """通义千问Embedding服务"""
 
     def __init__(self, provider: str = "dashscope"):
         load_dotenv()
         self.provider = provider.lower()
-        if self.provider not in self.PROVIDERS:
-            raise ValueError(f"Unsupported provider: {provider}")
-        self._setup_client()
-
-    def _setup_client(self):
-        if self.provider == "openai":
-            from openai import OpenAI
-            self._client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=None, max_retries=2)
-        elif self.provider == "dashscope":
-            import dashscope
-            dashscope.api_key = os.getenv("DASHSCOPE_API_KEY")
-            self._client = None
+        import dashscope
+        dashscope.api_key = os.getenv("DASHSCOPE_API_KEY")
+        self._client = None
 
     def embed(self, texts: Union[str, List[str]]) -> List[List[float]]:
         """获取文本嵌入向量，支持单条或批量。"""
@@ -32,13 +23,7 @@ class EmbeddingService:
         if not texts:
             raise ValueError("No valid text provided")
 
-        if self.provider == "openai":
-            return self._embed_openai(texts)
         return self._embed_dashscope(texts)
-
-    def _embed_openai(self, texts: List[str]) -> List[List[float]]:
-        response = self._client.embeddings.create(input=texts, model="text-embedding-3-large")
-        return [item.embedding for item in response.data]
 
     def _embed_dashscope(self, texts: List[str], batch_size: int = 25) -> List[List[float]]:
         from dashscope import TextEmbedding

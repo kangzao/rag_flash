@@ -37,11 +37,13 @@ class PipelineConfig:
 
         # === 输入文件路径 ===
         self.subset_path = root_path / subset_name  # 公司元数据CSV（file_name -> company_name映射）
-        self.questions_file_path = root_path / questions_file_name  # 问题列表JSON文件
+        self.questions_dir = root_path / "questions"  # 问题目录
+        self.questions_file_path = self.questions_dir / questions_file_name  # 问题列表JSON文件
         self.pdf_reports_dir = root_path / pdf_reports_dir_name  # 原始PDF报告目录
 
         # === 输出文件路径 ===
-        self.answers_file_path = root_path / f"answers{config_suffix}.json"  # 答案输出文件（支持后缀区分不同配置）
+        self.answers_dir = root_path / "answers"  # 答案目录
+        self.answers_file_path = self.answers_dir / f"answers{config_suffix}.json"  # 答案输出文件（支持后缀区分不同配置）
         self.debug_data_path = root_path / "debug_data"  # 调试数据根目录
         self.databases_path = root_path / f"databases{suffix}"  # 数据库目录（向量库+分块文档）
 
@@ -91,9 +93,8 @@ class RunConfig:
     submission_file: bool = True  # 是否生成提交格式的答案文件
     full_context: bool = False  # 是否提供完整上下文给LLM
 
-    # API配置
-    api_provider: str = "dashscope"  # API提供商（dashscope=阿里云，openai=OpenAI）
-    answering_model: str = "qwen-turbo-latest"  # 回答模型（可选：gpt-4o-mini, gpt-4o, qwen-turbo等）
+    # API配置（仅支持通义千问/dashscope）
+    answering_model: str = "qwen-turbo"  # 回答模型
     config_suffix: str = ""  # 配置文件后缀（用于区分不同实验的答案文件）
 
 
@@ -240,7 +241,7 @@ class Pipeline:
         )
         print(f"PDF reports parsed and saved to {self.paths.parsed_reports_path}")
 
-    def export_reports_to_markdown(self, file_name):
+    def export_reports_to_markdown(self, pdf_url: str, file_name: str = None):
         """
         使用MinerU API将指定PDF文件转换为Markdown格式
 
@@ -258,16 +259,16 @@ class Pipeline:
         - 图片提取（单独保存为PNG）
 
         参数：
-            file_name: PDF文件名（如'【财报】中芯国际：中芯国际2024年年度报告.pdf'）
+            pdf_url: PDF的OSS预签名URL
+            file_name: PDF文件名，用于命名输出（如'【财报】中芯国际：中芯国际2024年年度报告.pdf'）
 
         输出：
             debug_data/03_reports_markdown/{base_name}.md
         """
-        # 调用 pdf_mineru 获取 task_id 并下载、解压
-        print(f"开始处理: {file_name}")
-        task_id = pdf_mineru.get_task_id()  # 上传PDF并启动异步任务
+        print(f"开始处理: {file_name or pdf_url}")
+        task_id = pdf_mineru.get_task_id(pdf_url)
         print(f"task_id: {task_id}")
-        pdf_mineru.get_result(task_id)  # 等待任务完成并下载结果
+        pdf_mineru.get_result(task_id)
 
         # 解压后目录名与 task_id 相同
         extract_dir = f"{task_id}"
@@ -499,6 +500,10 @@ class Pipeline:
           }
         }
         """
+        # 确保输出目录存在
+        os.makedirs(self.paths.answers_dir, exist_ok=True)
+        os.makedirs(self.paths.questions_dir, exist_ok=True)
+
         processor = QuestionsProcessor(
             vector_db_dir=self.paths.vector_db_dir,  # FAISS索引目录
             documents_dir=self.paths.documents_dir,  # 分块JSON目录
@@ -510,7 +515,6 @@ class Pipeline:
             llm_reranking_sample_size=self.run_config.llm_reranking_sample_size,  # 重排序候选数
             top_n_retrieval=self.run_config.top_n_retrieval,  # 最终返回文档数
             parallel_requests=self.run_config.parallel_requests,  # 并发请求数
-            api_provider=self.run_config.api_provider,  # API提供商
             answering_model=self.run_config.answering_model,  # 回答模型
             full_context=self.run_config.full_context,  # 完整上下文开关
         )
@@ -573,7 +577,6 @@ class Pipeline:
             llm_reranking_sample_size=self.run_config.llm_reranking_sample_size,
             top_n_retrieval=self.run_config.top_n_retrieval,
             parallel_requests=1,  # 单问模式强制串行
-            api_provider=self.run_config.api_provider,
             answering_model=self.run_config.answering_model,
             full_context=self.run_config.full_context,
         )
@@ -600,9 +603,9 @@ preprocess_configs = {
 base_config = RunConfig(
     parallel_requests=10,  # 10并发
     submission_file=True,  # 生成提交格式
-    pipeline_details="Custom pdf parsing + vDB + Router + SO CoT; llm = GPT-4o-mini",
+    pipeline_details="Custom pdf parsing + vDB + Router + SO CoT; llm = qwen-turbo",
     config_suffix="_base",  # 答案文件后缀：answers_base.json
-    answering_model="gpt-4o-mini-2024-07-18",
+    answering_model="qwen-turbo",  # 使用通义千问
 )
 
 # 父文档检索配置：检索小片段但返回更大上下文
@@ -610,8 +613,8 @@ parent_document_retrieval_config = RunConfig(
     parent_document_retrieval=True,  # 启用父文档检索
     parallel_requests=20,  # 提高并发到20
     submission_file=True,
-    pipeline_details="Custom pdf parsing + vDB + Router + Parent Document Retrieval + SO CoT; llm = GPT-4o",
-    answering_model="gpt-4o-2024-08-06",  # 使用更强的GPT-4o
+    pipeline_details="Custom pdf parsing + vDB + Router + Parent Document Retrieval + SO CoT; llm = qwen-turbo",
+    answering_model="qwen-turbo",  # 使用通义千问
     config_suffix="_pdr",  # 答案文件后缀：answers_pdr.json
 )
 
@@ -648,7 +651,8 @@ if __name__ == "__main__":
     pipeline = Pipeline(root_path, run_config=max_config)
 
     print('4. 将pdf转化为纯markdown文本')
-    pipeline.export_reports_to_markdown('【财报】中芯国际：中芯国际2024年年度报告.pdf')
+    pdf_url = 'https://oss-pai-vd3ayvr6hn0lcq00ve-cn-shanghai.oss-cn-shanghai.aliyuncs.com/%E3%80%90%E8%B4%A2%E6%8A%A5%E3%80%91%E4%B8%AD%E8%8A%AF%E5%9B%BD%E9%99%85%EF%BC%9A%E4%B8%AD%E8%8A%AF%E5%9B%BD%E9%99%852024%E5%B9%B4%E5%B9%B4%E5%BA%A6%E6%8A%A5%E5%91%8A.pdf?Expires=1779292927&OSSAccessKeyId=TMP.3L1DeGL3Aro7eeJFnSKL2iCGzw5au9F2BZ2o1FssEQgj7uEVqqje56YERfWAGgSrme13gjqfFatSEE75R3SSPSAwTJQHCf&Signature=QXAAIwcEpurBUyYBtOagiaI7Jqo%3D'
+    pipeline.export_reports_to_markdown(pdf_url, '【财报】中芯国际：中芯国际2024年年度报告.pdf')
 
     # 5. 将规整后报告分块，便于后续向量化，输出到 databases/chunked_reports
     print('5. 将规整后报告分块，便于后续向量化，输出到 databases/chunked_reports')
@@ -657,3 +661,10 @@ if __name__ == "__main__":
     # 6. 从分块报告创建向量数据库，输出到 databases/vector_dbs
     print('6. 从分块报告创建向量数据库，输出到 databases/vector_dbs')
     pipeline.create_vector_dbs()
+
+    # 7. 处理问题并生成答案，具体逻辑取决于 run_config
+    # 默认questions.json
+    print('7. 处理问题并生成答案，具体逻辑取决于 run_config')
+    pipeline.process_questions()
+
+    print('完成')

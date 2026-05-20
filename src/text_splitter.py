@@ -76,7 +76,7 @@ class TextSplitter():
     def _split_page(self, page: Dict[str, any], chunk_size: int = 300, chunk_overlap: int = 50) -> List[Dict[str, any]]:
         """将单页文本分块，保留原始markdown表格。"""
         text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-            model_name="gpt-4o",
+            model_name="cl100k_base",  # 通义千问兼容的编码
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
