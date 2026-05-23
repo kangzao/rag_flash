@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 
 class EmbeddingService:
-    """通义千问Embedding服务"""
+    """通义千问 Embedding 服务"""
 
     def __init__(self, provider: str = "dashscope"):
         load_dotenv()
@@ -30,14 +30,18 @@ class EmbeddingService:
         embeddings = []
         for i in range(0, len(texts), batch_size):
             batch = texts[i:i + batch_size]
-            resp = TextEmbedding.call(model=TextEmbedding.Models.text_embedding_v1, input=batch)
-            if "embeddings" in resp.get("output", {}):
-                for emb in resp["output"]["embeddings"]:
+            resp = TextEmbedding.call(model="text-embedding-v1", input=batch)
+            output = resp.get("output")
+            if output is None:
+                raise RuntimeError(f"DashScope API error: {resp}")
+
+            if "embeddings" in output:
+                for emb in output["embeddings"]:
                     if not emb.get("embedding"):
                         raise RuntimeError(f"Empty embedding at index {emb.get('text_index')}")
                     embeddings.append(emb["embedding"])
-            elif "embedding" in resp.get("output", {}):
-                emb = resp["output"]["embedding"]
+            elif "embedding" in output:
+                emb = output["embedding"]
                 if not emb:
                     raise RuntimeError("Empty embedding")
                 embeddings.append(emb)

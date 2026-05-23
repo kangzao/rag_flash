@@ -1,9 +1,11 @@
 # Qwen-Turbo API的基础限流设置为每分钟不超过500次API调用（QPM）。同时，Token消耗限流为每分钟不超过500,000 Tokens
+import os
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'  # 解决 OpenMP 库冲突问题
+
 from dataclasses import dataclass
 from pathlib import Path
 from pyprojroot import here
 import logging
-import os
 import json
 import pandas as pd
 import shutil
@@ -12,8 +14,7 @@ import time
 from src.pdf_parsing import PDFParser
 from src import pdf_mineru
 from src.text_splitter import TextSplitter
-from src.ingestion import VectorDBIngestor
-from src.ingestion import BM25Ingestor
+from src.vector_store import VectorDBIngestor, BM25Ingestor
 from src.questions_processing import QuestionsProcessor
 
 
@@ -651,7 +652,7 @@ if __name__ == "__main__":
     pipeline = Pipeline(root_path, run_config=max_config)
 
     print('4. 将pdf转化为纯markdown文本')
-    pdf_url = 'https://oss-pai-vd3ayvr6hn0lcq00ve-cn-shanghai.oss-cn-shanghai.aliyuncs.com/%E3%80%90%E8%B4%A2%E6%8A%A5%E3%80%91%E4%B8%AD%E8%8A%AF%E5%9B%BD%E9%99%85%EF%BC%9A%E4%B8%AD%E8%8A%AF%E5%9B%BD%E9%99%852024%E5%B9%B4%E5%B9%B4%E5%BA%A6%E6%8A%A5%E5%91%8A.pdf?Expires=1779292927&OSSAccessKeyId=TMP.3L1DeGL3Aro7eeJFnSKL2iCGzw5au9F2BZ2o1FssEQgj7uEVqqje56YERfWAGgSrme13gjqfFatSEE75R3SSPSAwTJQHCf&Signature=QXAAIwcEpurBUyYBtOagiaI7Jqo%3D'
+    pdf_url = 'https://s3.hi168.com/hi168-u067316-08jsere8-s/%E3%80%90%E8%B4%A2%E6%8A%A5%E3%80%91%E4%B8%AD%E8%8A%AF%E5%9B%BD%E9%99%85%EF%BC%9A%E4%B8%AD%E8%8A%AF%E5%9B%BD%E9%99%852024%E5%B9%B4%E5%B9%B4%E5%BA%A6%E6%8A%A5%E5%91%8A.pdf'
     pipeline.export_reports_to_markdown(pdf_url, '【财报】中芯国际：中芯国际2024年年度报告.pdf')
 
     # 5. 将规整后报告分块，便于后续向量化，输出到 databases/chunked_reports

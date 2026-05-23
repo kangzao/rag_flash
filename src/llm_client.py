@@ -40,7 +40,7 @@ class DashscopeClient(LLMClient):
 
     def get_embedding(self, text: str):
         rsp = self.client.TextEmbedding.call(
-            model="text-embedding-v1",
+            model="text-embedding-v2",
             input=[text],
         )
         return rsp['output']['embeddings'][0]['embedding']

@@ -3,12 +3,16 @@ from typing import Union, Dict, List, Optional
 import re
 from pathlib import Path
 from src.retrieval import VectorRetriever, HybridRetriever
-from src.api_requests import APIProcessor
+from src.llm_processor import APIProcessor
+from src.exceptions import RetrievalError, DocumentNotFoundError
 from tqdm import tqdm
 import pandas as pd
 import threading
 import concurrent.futures
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class QuestionsProcessor:
@@ -19,15 +23,14 @@ class QuestionsProcessor:
         questions_file_path: Optional[Union[str, Path]] = None,
         new_challenge_pipeline: bool = False,
         subset_path: Optional[Union[str, Path]] = None,
-        parent_document_retrieval: bool = False,  # 是否启用父文档检索
-        llm_reranking: bool = False,              # 是否启用LLM重排
+        parent_document_retrieval: bool = False,
+        llm_reranking: bool = False,
         llm_reranking_sample_size: int = 5,
         top_n_retrieval: int = 10,
         parallel_requests: int = 10,
-        answering_model: str = "qwen-turbo",  # 通义千问
+        answering_model: str = "qwen-turbo-latest",
         full_context: bool = False,
     ):
-        # 初始化问题处理器，配置检索、模型、并发等参数
         self.questions = self._load_questions(questions_file_path)
         self.documents_dir = Path(documents_dir)
         self.vector_db_dir = Path(vector_db_dir)
@@ -40,7 +43,7 @@ class QuestionsProcessor:
         self.top_n_retrieval = top_n_retrieval
         self.answering_model = answering_model
         self.parallel_requests = parallel_requests
-        self.openai_processor = APIProcessor()  # 通义千问
+        self.llm_processor = APIProcessor()
         self.full_context = full_context
 
         self.answer_details = []
@@ -51,7 +54,6 @@ class QuestionsProcessor:
         self._companies_df = None
 
     def _load_questions(self, questions_file_path: Optional[Union[str, Path]]) -> List[Dict[str, str]]:
-        # 加载问题文件，返回问题列表
         if questions_file_path is None:
             return []
         with open(questions_file_path, 'r', encoding='utf-8') as file:
@@ -144,45 +146,58 @@ class QuestionsProcessor:
         return validated_pages
 
     def get_answer_for_company(self, company_name: str, question: str, schema: str) -> dict:
-        # 针对单个公司，检索上下文并调用LLM生成答案
         t0 = time.time()
         retriever = self._get_retriever()
         t1 = time.time()
-        print(f"[计时] [get_answer_for_company] 检索器获取耗时: {t1-t0:.2f} 秒")
-        if self.full_context:
-            retrieval_results = retriever.retrieve_all(company_name)
-        else:
-            t2 = time.time()
-            retrieval_results = retriever.retrieve_by_company_name(
-                company_name=company_name,
-                query=question,
-                llm_reranking_sample_size=self.llm_reranking_sample_size,
-                top_n=self.top_n_retrieval,
-                return_parent_pages=self.return_parent_pages,
-            )
-            t3 = time.time()
-            print(f"[计时] [get_answer_for_company] 检索耗时: {t3-t2:.2f} 秒")
+        logger.debug(f"[get_answer_for_company] 检索器获取耗时: {t1-t0:.2f}s")
+        
+        try:
+            if self.full_context:
+                retrieval_results = retriever.retrieve_all(company_name)
+            else:
+                t2 = time.time()
+                retrieval_results = retriever.retrieve_by_company_name(
+                    company_name=company_name,
+                    query=question,
+                    llm_reranking_sample_size=self.llm_reranking_sample_size,
+                    top_n=self.top_n_retrieval,
+                    return_parent_pages=self.return_parent_pages,
+                )
+                t3 = time.time()
+                logger.debug(f"[get_answer_for_company] 检索耗时: {t3-t2:.2f}s")
+        except DocumentNotFoundError as e:
+            logger.error(f"文档未找到: {e}")
+            raise RetrievalError(company_name, question, e)
+        except Exception as e:
+            logger.error(f"检索失败: {e}", exc_info=True)
+            raise RetrievalError(company_name, question, e)
+        
         if not retrieval_results:
-            raise ValueError("No relevant context found")
+            raise RetrievalError(company_name, question, Exception("No relevant context found"))
+        
         t4 = time.time()
         rag_context = self._format_retrieval_results(retrieval_results)
         t5 = time.time()
-        print(f"[计时] [get_answer_for_company] 构建rag_context耗时: {t5-t4:.2f} 秒")
-        answer_dict = self.openai_processor.get_answer_from_rag_context(
+        logger.debug(f"[get_answer_for_company] 构建rag_context耗时: {t5-t4:.2f}s")
+        
+        answer_dict = self.llm_processor.get_answer_from_rag_context(
             question=question,
             rag_context=rag_context,
             schema=schema,
             model=self.answering_model,
         )
         t6 = time.time()
-        print(f"[计时] [get_answer_for_company] LLM调用耗时: {t6-t5:.2f} 秒")
-        self.response_data = self.openai_processor.response_data
+        logger.debug(f"[get_answer_for_company] LLM调用耗时: {t6-t5:.2f}s")
+        
+        self.response_data = self.llm_processor.response_data
+        
         if self.new_challenge_pipeline:
             pages = answer_dict.get("relevant_pages", [])
             validated_pages = self._validate_page_references(pages, retrieval_results)
             answer_dict["relevant_pages"] = validated_pages
             answer_dict["references"] = self._extract_references(validated_pages, company_name)
-        print(f"[计时] [get_answer_for_company] 总耗时: {t6-t0:.2f} 秒")
+        
+        logger.info(f"[get_answer_for_company] 总耗时: {t6-t0:.2f}s")
         return answer_dict
 
     def _extract_companies_from_subset(self, question_text: str) -> list[str]:
@@ -201,7 +216,6 @@ class QuestionsProcessor:
         return found_companies
 
     def process_question(self, question: str, schema: str):
-        # 处理单个问题，支持多公司比较
         if self.new_challenge_pipeline:
             extracted_companies = self._extract_companies_from_subset(question)
         else:
@@ -477,7 +491,7 @@ class QuestionsProcessor:
         3. 汇总结果并生成最终比较答案
         """
         # Step 1: Rephrase the comparative question
-        rephrased_questions = self.openai_processor.get_rephrased_questions(
+        rephrased_questions = self.llm_processor.get_rephrased_questions(
             original_question=question,
             companies=companies,
         )
@@ -525,13 +539,13 @@ class QuestionsProcessor:
         aggregated_references = list(unique_refs.values())
         
         # Step 3: Get the comparative answer using all individual answers
-        comparative_answer = self.openai_processor.get_answer_from_rag_context(
+        comparative_answer = self.llm_processor.get_answer_from_rag_context(
             question=question,
             rag_context=individual_answers,
             schema="comparative",
             model=self.answering_model,
         )
-        self.response_data = self.openai_processor.response_data
+        self.response_data = self.llm_processor.response_data
         
         comparative_answer["references"] = aggregated_references
         return comparative_answer
